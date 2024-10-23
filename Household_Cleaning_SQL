@@ -1,0 +1,220 @@
+# Household_Data_Cleaning_Project
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+This project focuses on cleaning household data using MySQL. The data includes household information from 2015 to 2024, and covers different demographic categories. 
+
+The data used in this project comes from CBS (Statistics Netherlands). For more information, visit their website: https://www.cbs.nl/en-gb. 
+
+## Files
+
+- **01_RAW_Household_Totaal.csv**: SQL queries to clean the total household data.
+- **02_RAW_Men.csv**: SQL queries to clean data for men and women.
+- **03_RAW_Woman.csv**: Detailed explanation of the steps involved in the data cleaning process.
+
+## Steps
+
+The project consists of several steps:
+
+1. Adding an ID column and rearranging the data.
+2. Renaming columns to standardize year-based information.
+3. Cleaning out unnecessary rows and restructuring the dataset.
+4. Adding gender information for clarity between men and women.
+
+For detailed steps, see the instructions below. Let's get started!
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Household_Cleaning_Totaal
+-- 1. We start by selecting the table 'huishoudens_totaal' to review its initial structure.
+-- SQL Code:
+SELECT * FROM huishoudens_totaal;
+-- 2. Next, we retrieve data from another table 'mannen_vrouwen' for comparison.
+-- SQL Code:
+SELECT * FROM mannen_vrouwen;
+-- 3. We add a new 'id' column as the primary key, which auto-increments, and modify it to be the first column.
+-- SQL Code:
+
+SET @row_number = 0;
+ALTER TABLE huishoudens_totaal ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY;
+ALTER TABLE huishoudens_totaal MODIFY COLUMN id INT FIRST;
+-- 4. After adding the ID column, the structure looks better. Let's review the table again.
+-- SQL Code:
+SELECT * FROM huishoudens_totaal;
+-- 5. Now we proceed with updating the columns and removing unwanted characters (like the '|' symbol) from the dataset.
+-- SQL Code:
+
+SET SESSION group_concat_max_len = 1000000;
+
+SET @sql = NULL;
+
+SELECT 
+    GROUP_CONCAT(
+        CONCAT(
+            '`', COLUMN_NAME, '` = CASE ',
+            'WHEN LOCATE("|", `', COLUMN_NAME, '`) = 0 THEN `', COLUMN_NAME, '` ', 
+            'WHEN LOCATE("|", `', COLUMN_NAME, '`, LOCATE("|", `', COLUMN_NAME, '`) + 1) = 0 THEN SUBSTRING(`', COLUMN_NAME, '`, LOCATE("|", `', COLUMN_NAME, '`) + 1) ', 
+            'ELSE SUBSTRING(`', COLUMN_NAME, '`, LOCATE("|", `', COLUMN_NAME, '`, LOCATE("|", `', COLUMN_NAME, '`) + 1) + 1) ',
+            'END'
+        )
+    ) INTO @sql
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'huishoudens_totaal' 
+  AND TABLE_SCHEMA = DATABASE()
+  AND COLUMN_NAME != 'id';
+-- 6. We run the update query to clean the data.
+-- SQL Code:
+
+SET @sql = CONCAT('UPDATE huishoudens_totaal SET ', @sql, ' WHERE id = 1');
+
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+-- 7. After cleaning the dataset, we remove unnecessary rows, such as row 2 where extra information is stored.
+-- SQL Code:
+DELETE FROM huishoudens_totaal WHERE id = 2;
+SELECT * FROM huishoudens_totaal;
+-- 8. We now rename columns by adding the appropriate year descriptions for each data point.
+-- SQL Code for 2015:
+
+ALTER TABLE huishoudens_totaal RENAME COLUMN `2015` TO `2015 Totaal personen in huishoudens`;
+ALTER TABLE huishoudens_totaal RENAME COLUMN `2015_[0]` TO `2015 Totaal in particuliere huishoudens`;
+ALTER TABLE huishoudens_totaal RENAME COLUMN `2015_[1]` TO `2015 Thuiswonend kind`;
+ALTER TABLE huishoudens_totaal RENAME COLUMN `2015_[2]` TO `2015 Alleenstaand`;
+ALTER TABLE huishoudens_totaal RENAME COLUMN `2015_[3]` TO `2015 Totaal samenwonende personen`;
+ALTER TABLE huishoudens_totaal RENAME COLUMN `2015_[4]` TO `2015 Ouder in eenouderhuishouden`;
+ALTER TABLE huishoudens_totaal RENAME COLUMN `2015_[5]` TO `2015 Overig lid huishouden`;
+ALTER TABLE huishoudens_totaal RENAME COLUMN `2015_[6]` TO `2015 Personen in institutionele huishoudens`;
+-- SQL Code for 2016 to 2024 follows a similar structure.
+-- 9. Finally, we rename the 'Perioden' column to 'Regio's' for consistency and clarity.
+-- SQL Code:
+ALTER TABLE huishoudens_totaal RENAME COLUMN `ï»¿Perioden` TO `Regio's`;
+-- 10. The final cleaned data is stored in 'huishoudens_totaal'.
+-- SQL Code:
+SELECT * FROM huishoudens_totaal;
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-- SQL Code Explanation for Household men_wife Data Cleaning
+
+SELECT * FROM mannen_vrouwen;
+-- This query selects all data from the table 'mannen_vrouwen'. At this point, the data includes two Excel sheets combined: the first sheet contains data for men, and the second for women.
+
+ALTER TABLE mannen_vrouwen ADD COLUMN volgorde INT;
+-- We add a new column named 'volgorde', which will help us maintain the order of the rows. Since adding an ID directly could cause the rows to mix, we create this auxiliary column to maintain the current order.
+
+SET @row_number = 0;
+-- This initializes a variable 'row_number' that will be used to assign sequential numbers to the 'volgorde' column.
+
+UPDATE mannen_vrouwen SET volgorde = (@row_number := @row_number + 1);
+-- This query updates the 'volgorde' column by incrementing the 'row_number' variable. Each row will receive a unique number to maintain its order.
+
+ALTER TABLE mannen_vrouwen ADD COLUMN id INT;
+-- After assigning numbers to 'volgorde', we add a new 'id' column.
+
+UPDATE mannen_vrouwen SET id = volgorde;
+-- This query copies the values from 'volgorde' to the new 'id' column.
+
+SELECT * FROM mannen_vrouwen ORDER BY volgorde ASC;
+-- We select the data from 'mannen_vrouwen' ordered by the 'volgorde' column to confirm that the order is correct.
+
+ALTER TABLE mannen_vrouwen ADD PRIMARY KEY (id);
+-- Here, we set the 'id' column as the primary key for the table.
+
+ALTER TABLE mannen_vrouwen DROP COLUMN volgorde;
+-- Once the 'id' column is established, we no longer need 'volgorde', so it is dropped.
+
+ALTER TABLE mannen_vrouwen MODIFY COLUMN id INT FIRST;
+-- We move the 'id' column to the first position in the table for better readability.
+
+SET SESSION group_concat_max_len = 1000000;
+-- This adjusts the session variable to allow for longer concatenation operations.
+
+SET @sql = NULL;
+-- This sets up an empty variable '@sql' that will later store dynamically generated SQL queries.
+
+SELECT 
+    GROUP_CONCAT(
+        CONCAT(
+            '`', COLUMN_NAME, '` = CASE ',
+            'WHEN LOCATE("|", `', COLUMN_NAME, '`) = 0 THEN `', COLUMN_NAME, '` ', 
+            'WHEN LOCATE("|", `', COLUMN_NAME, '`, LOCATE("|", `', COLUMN_NAME, '`) + 1) = 0 THEN SUBSTRING(`', COLUMN_NAME, '`, LOCATE("|", `', COLUMN_NAME, '`) + 1) ', 
+            'ELSE SUBSTRING(`', COLUMN_NAME, '`, LOCATE("|", `', COLUMN_NAME, '`, LOCATE("|", `', COLUMN_NAME, '`) + 1) + 1) ',
+            'END'
+        )
+    ) INTO @sql
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'mannen_vrouwen' 
+  AND TABLE_SCHEMA = DATABASE()
+  AND COLUMN_NAME != 'id';
+-- This dynamically generates an SQL update query for each column, ensuring that if a column contains a pipe ('|'), the data is properly cleaned. The logic handles different cases based on the presence and position of the pipe character.
+
+SET @sql = CONCAT('UPDATE mannen_vrouwen SET ', @sql, ' WHERE id = 1');
+-- The SQL query generated earlier is now applied to the row where id = 1.
+
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+-- These statements prepare, execute, and deallocate the dynamically generated SQL query.
+
+DELETE FROM mannen_vrouwen WHERE id = 2;
+-- This deletes row 2, which contains redundant data for the region names and totals.
+
+ALTER TABLE mannen_vrouwen RENAME COLUMN `2015` TO `2015 Totaal personen in huishoudens`;
+ALTER TABLE mannen_vrouwen RENAME COLUMN `2015_[0]` TO `2015 Totaal in particuliere huishoudens`;
+-- (repeat for each year and column)
+-- These queries rename the columns to provide a more descriptive and meaningful name based on the year and data type, ensuring clarity in the dataset.
+
+UPDATE mannen_vrouwen
+SET `Regio's_mannen` = 'Regio\'s_vrouwen'
+WHERE id = 17;
+
+-- Here, we update row 17 to change the name from 'Regio's_mannen' to 'Regio's_vrouwen' to distinguish between the data for men and women.
+
+DELETE FROM mannen_vrouwen WHERE id = 18;
+DELETE FROM mannen_vrouwen WHERE id = 16;
+DELETE FROM mannen_vrouwen WHERE id = 32;
+-- These rows are unnecessary and are deleted to clean up the data further.
+
+SELECT COUNT(*) AS aantal_kolommen
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'mannen_vrouwen' AND TABLE_SCHEMA = DATABASE();
+-- This query counts the number of columns in the table to ensure that we know how many columns are present for future operations.
+
+SET SESSION group_concat_max_len = 1000000;
+-- This again sets the maximum length for group concatenation.
+
+SET @sql = NULL;
+-- Resets the SQL string.
+
+SELECT 
+    GROUP_CONCAT(
+        CONCAT(
+            'mv.`', COLUMN_NAME, '` = '', COLUMN_NAME, '''
+        )
+    ) INTO @sql
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'mannen_vrouwen' 
+  AND COLUMN_NAME NOT IN ('id', 'Regio\'s_mannen');
+-- This generates an SQL update query that resets the values in row 17 (which now contains headers for the women’s data) by copying the column names into the cells.
+
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+-- These statements execute the generated SQL to update row 17.
+
+ALTER TABLE mannen_vrouwen ADD COLUMN geslacht VARCHAR(10);
+UPDATE mannen_vrouwen
+SET geslacht = 'man'
+WHERE id BETWEEN 3 AND 15;
+UPDATE mannen_vrouwen
+SET geslacht = 'vrouw'
+WHERE id BETWEEN 19 AND 31;
+UPDATE mannen_vrouwen
+SET geslacht = NULL
+WHERE id IN (17, 18);
+-- Here, we add a 'geslacht' (gender) column and update it accordingly for men (id 3-15) and women (id 19-31). Rows 17 and 18 are left null.
+
+ALTER TABLE mannen_vrouwen MODIFY COLUMN geslacht VARCHAR(10) AFTER id;
+-- This moves the 'geslacht' column to the second position, immediately after 'id'.
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
